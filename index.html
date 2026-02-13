@@ -1,0 +1,2082 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser-arcade-physics.min.js"></script>
+</head>
+<body style="margin: 0; background: #222;">
+    <div id="game-container"></div>
+    <script>
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 450,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: { gravity: { y: 800 }, debug: true, fps: 120}
+            },
+            scene: { preload: preload, create: create, update: update }
+        };
+
+        const game = new Phaser.Game(config);
+            let player, cursors, tubes, lastFired = 0;
+            let currentWeapon = 'PolymerP';
+            let capsids;
+            let weaponStats = {
+                'PolymerP': { speed: 300, fireRate: 500, damage: 1, texture: 'tubeP' },
+                'PolymerF': { speed: 500, fireRate: 300, damage: 1.6, texture: 'tubeF' },
+                'VirusGEN': { speed: 800, fireRate: 150, damage: 2.5, texture: 'tubeV' }
+            };
+            let boss;
+            let bossState = 'attacking';
+            let bossTimer = null;
+            let bossHP = 50;
+            let bossMaxHP = 50;
+            let bossHealthBar;
+            let playerHP = 50;
+            let healthText;
+            let revITActive = false;
+            let stabilizerActive = false;
+            let totalScore = 0;
+
+        function preload() {
+            //Load your Scientist (384px wide / 6 frames = 64px per frame)
+            this.load.spritesheet('scientist', 'assets/Scientist01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.image('item_F', 'assets/ItemPolymerF01.png');
+            this.load.image('item_VirusGEN', 'assets/ItemVirusGEN01.png');
+            this.load.image('tubeP', 'assets/TubeProjectilePolymerP01.png');
+            this.load.image('tubeF', 'assets/TubeProjectilePolymerF01.png');
+            this.load.image('tubeV', 'assets/TubeProjectileVirusGEN01.png');
+            this.load.image('item_P', 'assets/ItemPolymerP01.png');
+            this.load.image('capsid_full', 'assets/CapsidFull01.png');
+            this.load.image('capsid_empty', 'assets/CapsidEmpty01.png');
+            this.load.image('platform01', 'assets/Platform01.png');
+            this.load.spritesheet('platform02tiles', 'assets/Tileset_Platform_01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.image('bossClosed', 'assets/BossBioreactorClosed01.png');
+            this.load.image('bossOpen', 'assets/BossBioreactorOpen01.png');
+            this.load.image('BasementTile', 'assets/BasementTile01.png');
+            this.load.image('benchtopTile', 'assets/BenchtopTile01.png');
+            this.load.image('door', 'assets/Door01.png');
+            this.load.spritesheet('transSelectButton', 'assets/TransfectionSelectionButtonTiles01.png', { frameWidth: 126, frameHeight: 24 });
+            this.load.image('bakeoffNotebook', 'assets/BakeoffNotebook01.png');
+            this.load.image('blockSpace', 'assets/BuildingBlock01.png');
+            this.load.spritesheet('FloatingPlatform', 'assets/FloatingPlatformSprites01.png', { frameWidth: 64, frameHeight: 48 });
+            this.load.image('item_RevIT', 'assets/ItemRevIT01.png');
+            this.load.image('item_Stabilizer', 'assets/ItemStabilizer01.png');
+            this.load.image('notebookPF', 'assets/NotebookPF01.png');
+            this.load.image('notebookPP', 'assets/NotebookPP01.png');
+            this.load.image('notebookVG', 'assets/NotebookVG01.png');
+            this.load.spritesheet('verticalWall', 'assets/VerticalWallTileSheet01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.image('floorTile', 'assets/FloorTile01.png');
+            this.load.spritesheet('toolUIimg', 'assets/ToolUI01.png', { frameWidth: 192, frameHeight: 64 }); 
+            this.load.image('labmatePortrait', 'assets/LabmateHead01.png');
+            this.load.spritesheet('labmateMouth', 'assets/LabmateMouth01.png', { frameWidth: 48, frameHeight: 20 }); 
+            this.load.image('benchBackground', 'assets/BenchtopTile01.png');
+            this.load.spritesheet('labmateIdle', 'assets/labMateTileSprite01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.image('item_notebook', 'assets/ItemBakeOff01.png');
+            this.load.image('large_notebook', 'assets/BakeoffNotebook01.png');
+            this.load.spritesheet('shearEmitter', 'assets/shearingEmitter01.png', { frameWidth: 32, frameHeight: 32 });
+            this.load.spritesheet('shearLaser01', 'assets/shearingLaser01.png', { frameWidth: 32, frameHeight: 64 });
+            this.load.image('shearLaser02', 'assets/shearingLaser02.png');
+            this.load.image('powerup_crate', 'assets/ItemVirusGEN01.png');
+            this.load.image('modal_bg', 'assets/modalBG01.png');
+            this.load.spritesheet('avatar_biz', 'assets/avatarBiz01.png', { frameWidth: 120, frameHeight: 90 });
+            this.load.spritesheet('avatar_rnd', 'assets/avatarRnd01.png', { frameWidth: 120, frameHeight: 90 });
+            this.load.spritesheet('avatar_mirus', 'assets/avatarMirus01.png', { frameWidth: 120, frameHeight: 90 });
+            this.load.spritesheet('avatar_player', 'assets/avatarPlayer01.png', { frameWidth: 120, frameHeight: 90 });
+            this.load.spritesheet('intro_biz', 'assets/BizDev_Idle_01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.spritesheet('intro_RnD', 'assets/RnD_Idle_01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.image('biz_bg', 'assets/boardRoom_01.png');
+            this.load.image('rnd_bg', 'assets/labMeeting_01.png');
+            this.load.spritesheet('mirusFAS_npc', 'assets/FAS_idlethrow_01.png', { frameWidth: 64, frameHeight: 64 });
+            this.load.spritesheet('mirusReg_npc', 'assets/Regulatory_idlejog_01.png', { frameWidth: 64, frameHeight: 64});
+            this.load.spritesheet('start_bg', 'assets/WelcomeScreen01.png', { frameWidth: 800, frameHeight: 450 });
+        }
+
+        function create() {
+            // 1. SCENE CONSTANTS
+            let section1Shift = 2400; // section 1 shift starts at x=2000
+            let section2Shift = section1Shift + 2400; // section 2 shift starts at x=5000
+            let section3Shift = section2Shift + 2400; // section 3 shift starts at x=8000
+            let section4Shift = section3Shift + 2500; // section 4 shift starts at x=11000
+            let bossRoomShift = section4Shift + 3800; // boss room starts at x=12200
+            let bossRoomEnd = bossRoomShift + 800; // boss room ends at x=13000
+            let mainFloorY = 430;
+            let bossFloorY = mainFloorY + 370;
+            this.speedLimited = true;
+            this.bossRoomShift = bossRoomShift;
+            this.section4Shift = section4Shift;
+            this.scoreThreshold = 10000000000; // 10 billion points to win
+            this.spaceBar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+            
+            // 2. PHYSICS GROUPS
+            tubes = this.physics.add.group();
+            capsids = this.physics.add.group();
+            this.capsids = capsids;
+            this.pickups = this.physics.add.staticGroup();
+            this.platforms = this.physics.add.staticGroup();
+            this.movingPlatforms = this.physics.add.group({
+                allowGravity: false,
+                immovable: true
+            })
+
+            // 11. ANIMATIONS
+            this.anims.create({
+                key: 'idle',
+                frames: [{ key: 'scientist', frame: 0 }],
+                frameRate: 10
+            });
+            this.anims.create({
+                key: 'walk',
+                frames: this.anims.generateFrameNumbers('scientist', { start: 1, end: 4 }),
+                frameRate: 10,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'throw',
+                frames: [{ key: 'scientist', frame: 5 }],
+                frameRate: 20
+            });
+
+            // NPC idle pose animation
+            this.anims.create({
+                key: 'labmate_idle_anim',
+                frames: this.anims.generateFrameNumbers('labmateIdle', { start: 0, end: 3 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.labmate = this.add.sprite(1800, mainFloorY, 'labmateIdle');
+            this.labmate.setOrigin(0.5, 1).setDepth(20);
+            this.labmate.play('labmate_idle_anim');
+            
+            this.anims.create({
+                key: 'platform_move',
+                frames: this.anims.generateFrameNumbers('FloatingPlatform', { start: 0, end: 3 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            this.movingPlatforms = this.physics.add.group({
+                allowGravity: false,
+                immovable: true
+            });
+            this.anims.create({
+                key: 'shear_emit_charge',
+                frames: this.anims.generateFrameNumbers('shearEmitter', { start: 1, end: 2 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'shear_emit_active',
+                frames: this.anims.generateFrameNumbers('shearEmitter', { start: 3, end: 5 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'loop_biz',
+                frames: this.anims.generateFrameNumbers('avatar_biz', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'loop_rnd',
+                frames: this.anims.generateFrameNumbers('avatar_rnd', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'loop_mirusteam',
+                frames: this.anims.generateFrameNumbers('avatar_mirus', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'loop_selfie',
+                frames: this.anims.generateFrameNumbers('avatar_player', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'rnd_speak',
+                frames: this.anims.generateFrameNumbers('intro_RnD', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'biz_speak',
+                frames: this.anims.generateFrameNumbers('intro_biz', { start: 0, end: 5 }),
+                frameRate: 6,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'mirus_throw',
+                frames: this.anims.generateFrameNumbers('mirusFAS_npc', { start: 1, end: 5}),
+                frameRate: 8,
+                repeat: 0 // Play once per trigger
+            });
+            this.anims.create({
+                key: 'reg_walk',
+                frames: this.anims.generateFrameNumbers('mirusReg_npc', { start: 1, end: 5}),
+                frameRate: 10,
+                repeat: -1
+            });
+            this.anims.create({
+                key: 'start_anim',
+                frames: this.anims.generateFrameNumbers('start_bg', { start: 0, end: 5 }),
+                frameRate: 8,
+                repeat: -1
+            });
+            
+            // 3. GAME OBJECTS
+            player = this.physics.add.sprite(100, 300, 'scientist');
+            player.body.setCollideWorldBounds(true);
+            player.setDepth(30);
+            this.player = player;
+
+            boss = this.physics.add.sprite(bossRoomShift + 600, 652, 'bossClosed');
+            boss.body.setAllowGravity(false);
+            boss.setImmovable(true);
+            boss.hp = 50;
+
+             // Initialize all scene-level variables
+            this.currentWeapon = null;
+            this.lastFired = 0;
+            this.revITActive = false;
+            this.stabilizerActive = false;
+            this.bossState = 'attacking';
+            this.bossTimer = null;
+            this.bossHP = 50;
+            this.bossMaxHP = 50;
+            playerHP = 50;
+            this.controlsEnabled = true;
+            this.challengeStarted = false;
+            bossStarted = false
+            this.gameStarted = false;
+            
+            this.weaponStats = {
+                'PolymerP': { speed: 300, fireRate: 500, damage: 1, texture: 'tubeP' },
+                'PolymerF': { speed: 500, fireRate: 300, damage: 1.6, texture: 'tubeF' },
+                'VirusGEN': { speed: 800, fireRate: 150, damage: 2.5, texture: 'tubeV' }
+            };
+
+            // 4. ENVIRONMENT & WORLD
+            this.add.tileSprite(0, mainFloorY, bossRoomShift, 40, 'floorTile').setOrigin(0, 0);
+            this.add.tileSprite(bossRoomShift, bossFloorY, bossRoomEnd - bossRoomShift, 40, 'floorTile').setOrigin(0, 0);
+
+            let groundWidth = bossRoomShift; 
+            let mainGround = this.add.rectangle(0, mainFloorY, groundWidth, 40).setOrigin(0, 0).setVisible(false);
+            this.physics.add.existing(mainGround, true);
+            this.platforms.add(mainGround);
+
+            let bossFloor = this.add.rectangle(bossRoomShift, bossFloorY + 40, bossRoomEnd - bossRoomShift, 40).setVisible(false);
+            this.physics.add.existing(bossFloor, true);
+            this.platforms.add(bossFloor);
+
+            createVerticalWall(this, bossRoomShift, 440, 4, this.platforms);
+            createVerticalWall(this, bossRoomEnd, 440, 4, this.platforms);
+
+            // 5. ENVIRONMENT
+            // --- Section 1A intro --- clean room
+            let introSquare = this.add.image(368, -475, 'blockSpace').setOrigin(0.5, 0).setDepth(10);
+            this.physics.add.existing(introSquare, true);
+
+            this.door1A = this.physics.add.image(748, 305, 'door').setImmovable(true).setDepth(9);
+            this.door1A.body.setAllowGravity(false);
+            addDialogueTrigger(this, 600, 430, 100, 200, () => {
+                let msg = "Hey! Help me with this AAV therapeutic. Meet me at the bench.";
+                startBlockingDialogue(this, msg, () => {
+                    // This runs after they press SPACE
+                    if (this.door1A) {
+                        this.tweens.add({ targets: this.door1A, y: this.door1A.y - 80, duration: 2000 });
+                    }
+                });
+            });
+
+            // // Door 1
+            // this.door1A = this.physics.add.image(748, 305, 'door');
+            // this.door1A.body.setAllowGravity(false);
+            // this.door1A.setImmovable(true);
+            // this.door1A.setDepth(9); 
+            
+            [section1Shift, section2Shift, section3Shift, section4Shift].forEach((shift, i) => {
+                let sq = this.add.image(shift, -475, 'blockSpace').setOrigin(0.5, 0).setDepth(10);
+                this.physics.add.existing(sq, true);
+                this.physics.add.collider(player, sq);
+            });
+
+            // --- Section 1C intro --- bench space, get polymer p
+            this.benchBacking1 = this.add.tileSprite(section1Shift, mainFloorY, 800, 200, 'benchBackground');
+            this.benchBacking1.setOrigin(0.5, 1);
+            this.benchBacking1.setDepth(-5);
+            // Labmate NPC
+            spawnLabmate (this, section1Shift + 200, mainFloorY);
+            // Door 2
+            this.door1C = this.physics.add.image(section1Shift + 380, 305, 'door');
+            this.door1C.body.setAllowGravity(false);
+            this.door1C.setImmovable(true);
+            this.door1C.setDepth(9);
+            addDialogueTrigger(this, section1Shift + 200, 430, 100, 200, () => {
+                let msg = "Start delivering nucleic acids to the cell line. We need to maximize our titer and percent-full capsids. Use Polymer P. It has been a reliable method for decades. Capture as many full capsids as possible.";
+                startBlockingDialogue(this, msg, () => {
+                    // This runs after they press SPACE
+                    if (this.door1C) {
+                        this.tweens.add({ targets: this.door1C, y: this.door1C.y - 80, duration: 2000 });
+                    }
+                });
+            });
+
+            // Speed Trigger: Remove speed limit after they enter section 1
+            let speedTrigger = this.add.zone(section1Shift + 300, mainFloorY, 100, 400);
+            this.physics.add.existing(speedTrigger, true);
+
+            this.physics.add.overlap(player, speedTrigger, () => {
+                this.speedLimited = false; // "Natural" speed increase happens here
+                speedTrigger.destroy();
+            }, null, this);
+            
+            // --- Section 2 Lab --- bench space, get polymer f
+            this.benchBacking2 = this.add.tileSprite(section2Shift, mainFloorY, 800, 200, 'benchBackground');
+            this.benchBacking2.setOrigin(0.5, 1);
+            this.benchBacking2.setDepth(-5);
+            // Labmate NPC
+            spawnLabmate (this, section2Shift + 200, mainFloorY);
+            // Section 2 door
+            this.door2 = this.physics.add.image(section2Shift + 380, 305, 'door');
+            this.door2.body.setAllowGravity(false);
+            this.door2.setImmovable(true);
+            this.door2.setDepth(9);
+            addDialogueTrigger(this, section2Shift + 200, 430, 100, 200, () => {
+                let msg = "Try PolymerF. It's a lipid-polymer reagent that can improve delivery. Watch out for shearing and regulatory traps because the transfection complexation window makes scaling difficult.";
+                startBlockingDialogue(this, msg, () => {
+                    // This runs after they press SPACE
+                    if (this.door2) {
+                        this.tweens.add({ targets: this.door2, y: this.door2.y - 80, duration: 2000 });
+                    }
+                });
+            });
+            
+            // --- Section 3 Lab --- bench space, get virusgen
+            this.benchBacking3 = this.add.tileSprite(section3Shift, mainFloorY, 800, 200, 'benchBackground');
+            this.benchBacking3.setOrigin(0.5, 1);
+            this.benchBacking3.setDepth(-5);
+            // Labmate NPC
+            spawnLabmate (this, section3Shift + 200, mainFloorY);
+            // Section 3 door
+            this.door3 = this.physics.add.image(section3Shift + 380, 305, 'door');
+            this.door3.body.setAllowGravity(false);
+            this.door3.setImmovable(true);
+            this.door3.setDepth(9);
+            addDialogueTrigger(this, section3Shift + 200, 430, 100, 200, () => {
+                let msg = "Now try VirusGEN. It's a virus-based delivery system that is built specifically for scaling our virus production. A member of their support team is onsite helping us scale.";
+                startBlockingDialogue(this, msg, () => {
+                    // This runs after they press SPACE
+                    if (this.door3) {
+                        this.tweens.add({ targets: this.door3, y: this.door3.y - 80, duration: 2000 });
+                    }
+                });
+            });
+
+            // --- Section 4 Lab --- bench space, get enhancers
+            this.benchBacking4 = this.add.tileSprite(section4Shift, mainFloorY, 800, 200, 'benchBackground');
+            this.benchBacking4.setOrigin(0.5, 1);
+            this.benchBacking4.setDepth(-5);
+            // Labmate NPC
+            spawnLabmate (this, section4Shift + 200, mainFloorY);
+            // Section 4 door
+            this.door4 = this.physics.add.image(section4Shift + 380, 305, 'door');
+            this.door4.body.setAllowGravity(false);
+            this.door4.setImmovable(true);
+            this.door4.setDepth(9);
+            addDialogueTrigger(this, section4Shift + 200, 430, 100, 200, () => {
+                let msg = "Pretty powerful. Try it's enhancers! RevIT boosts production 2-4X, and VirusGEN Stabilizer extends the transfection complex delivery window up to 180 minutes!";
+                startBlockingDialogue(this, msg, () => {
+                    // This runs after they press SPACE
+                    if (this.door4) {
+                        this.tweens.add({ targets: this.door4, y: this.door4.y - 80, duration: 2000 });
+                    }
+                });
+            });
+
+            // --- Section 1C --- polymer p
+            createPlatform(this, this.platforms, section1Shift + 560, 350, 2);
+            createPlatform(this, this.platforms, section1Shift + 752, 250, 3);
+            createPlatform(this, this.platforms, section1Shift + 496, 150, 2);
+            createPlatform(this, this.platforms, section1Shift + 1264, 350, 4);
+            createPlatform(this, this.platforms, section1Shift + 1584, 286, 2);
+            // --- Section 2 --- polymer f
+            createPlatform(this, this.platforms, section2Shift + 540, 380, 2);
+            createPlatform(this, this.platforms, section2Shift + 732, 300, 3);
+            createPlatform(this, this.platforms, section2Shift + 1138, 250, 2);
+            createPlatform(this, this.platforms, section2Shift + 1550, 200, 2);
+            // --- Section 3 --- virusgen
+            createPlatform(this, this.platforms, section3Shift + 600, 350, 2);
+            createPlatform(this, this.platforms, section3Shift + 800, 260, 3);
+            createPlatform(this, this.platforms, section3Shift + 1200, 300, 2);
+            createPlatform(this, this.platforms, section3Shift + 1400, 154, 2);
+            // --- Section 4 --- enhancers
+            createPlatform(this, this.platforms, section4Shift + 850, 375, 2);
+            createPlatform(this, this.platforms, section4Shift + 600, 300, 2);
+            createPlatform(this, this.platforms, section4Shift + 914, 200, 2);
+            createPlatform(this, this.platforms, section4Shift + 1350, 375, 2);
+            createPlatform(this, this.platforms, section4Shift + 2250, 260, 2);
+            createPlatform(this, this.platforms, section4Shift + 2550, 260, 2);
+
+            // --- Moving Platform ---
+            this.movingPlatform = this.physics.add.group({
+                allowGravity: false,
+                immovable: true
+            });
+
+            let mp = this.movingPlatform.create(section4Shift + 1800, 300, 'FloatingPlatform');
+            mp.startX = section4Shift + 1650;
+            mp.range = 350;
+            mp.speed = 2;
+            mp.direction = 1;
+
+            this.physics.add.collider(player, this.movingPlatform);
+
+            // 10. ITEMS & NOTEBOOKS
+            // NOTEBOOKS
+            // Notebook 1 Conversation 4 polymer P
+            this.notebook1 = this.physics.add.sprite(section1Shift + 300, 410, 'item_notebook').setOrigin(0.5, 1).setDepth(15);
+            this.notebook1.body.allowGravity = false;
+            this.physics.add.overlap(player, this.notebook1, () => {
+                collectNotebookP(this); 
+            }, null, this);
+            // Notebook 2 polymer F
+            this.notebook2 = this.physics.add.sprite(section2Shift + 300, 410, 'item_notebook').setOrigin(0.5, 1).setDepth(15);
+            this.notebook2.body.allowGravity = false;
+            this.physics.add.overlap(player, this.notebook2, () => {
+                collectNotebookF(this); 
+            }, null, this);
+            // Notebook 3 virusgen
+            this.notebook3 = this.physics.add.sprite(section3Shift + 300, 410, 'item_notebook').setOrigin(0.5, 1).setDepth(15); 
+            this.notebook3.body.allowGravity = false;
+            this.physics.add.overlap(player, this.notebook3, () => {
+                collectNotebookV(this); 
+            }, null, this);
+            // ENHANCERS
+            // RevIT
+            let revItem = this.pickups.create(section4Shift + 530, 400, 'item_RevIT');
+            this.physics.add.overlap(player, revItem, (p, item) => {
+                if (item.alpha < 1) return;
+                this.revITActive = true;
+                item.setAlpha(0.3);
+                this.time.delayedCall(10000, () => { this.revITActive = false; });
+                this.time.delayedCall(20000, () => { item.setAlpha(1); });
+            }, null, this);
+            // Stabilizer
+            this.itemStabilizer = this.physics.add.staticSprite(section4Shift + 1350, 200, 'item_Stabilizer');
+            this.physics.add.overlap(player, this.itemStabilizer, () => {
+                if (this.stabilizerActive || this.itemStabilizer.alpha < 1) return;
+
+                this.stabilizerActive = true;
+                this.itemStabilizer.setAlpha(0.3);
+                capsids.getChildren().forEach(c => c.setTint(0x00ffff));
+
+                this.time.delayedCall(10000, () => {
+                    this.stabilizerActive = false;
+                    capsids.getChildren().forEach(c => c.clearTint());
+                });
+
+                this.time.delayedCall(20000, () => {
+                    this.itemStabilizer.setAlpha(1);
+                });
+            }, null, this);
+
+            // 11. CAPSIDS (Full Spawnpoint List)
+            // Spawn Capsids
+            let spawnpoints = [
+                // --- Section 1 ---
+                {x:section1Shift + 650, y:180},
+                {x:section1Shift + 430, y:50},
+                {x:section1Shift + 752, y:50},
+                {x:section1Shift + 1050, y:160},
+                {x:section1Shift + 1264, y:50},
+                {x:section1Shift + 1450, y:75},
+                {x:section1Shift + 1616, y:25},
+                {x:section1Shift + 1816, y:75},
+                // --- Section 2 ---
+                {x:section2Shift + 460, y:180},
+                {x:section2Shift + 1000, y:180},
+                {x:section2Shift + 1300, y:140},
+                {x:section2Shift + 1400, y:100},
+                {x:section2Shift + 1550, y:50},
+                {x:section2Shift + 1746, y:25},
+                {x:section2Shift + 1786, y:75},
+                {x:section2Shift + 1846, y:50},
+                {x:section2Shift + 1760, y:150},
+                {x:section2Shift + 1880, y:250},
+                // --- Section 3 ---
+                {x:section3Shift + 500, y:100},
+                {x:section3Shift + 600, y:250},
+                {x:section3Shift + 1070, y:150},
+                {x:section3Shift + 1150, y:175},
+                {x:section3Shift + 1400, y:250},
+                {x:section3Shift + 1600, y:105},
+                {x:section3Shift + 1700, y:105},
+                {x:section3Shift + 1800, y:105},
+                {x:section3Shift + 1900, y:105},
+                {x:section3Shift + 2000, y:105},
+                // --- Section 4 ---
+                {x:section4Shift + 450, y:225},
+                {x:section4Shift + 850, y:225},
+                {x:section4Shift + 1150, y:125},
+                {x:section4Shift + 1200, y:250},
+                {x:section4Shift + 2750, y:215},
+                {x:section4Shift + 2750, y:175},
+                {x:section4Shift + 2800, y:200},
+                {x:section4Shift + 2850, y:215},
+                {x:section4Shift + 2850, y:175},
+                {x:section4Shift + 2900, y:200},
+                {x:section4Shift + 2950, y:215},
+                {x:section4Shift + 2950, y:175},
+            ];
+            spawnpoints.forEach(pos => {
+                let cap = capsids.create(pos.x, pos.y, 'capsid_full');
+                cap.body.setAllowGravity(false);
+                cap.body.checkCollision.none = false;
+                cap.body.embedded = true;
+                cap.hp = 5; 
+                cap.baseY = pos.y; 
+            });
+
+            // 12. TRAPS & PORTALS
+            // PORTALS
+            const createPortal = (x, y, label, targetX) => {
+                let portal = this.add.rectangle(x, y, 60, 60, 0xff0000);
+                this.physics.add.existing(portal, true);
+                this.add.text(x-50, y-50, label, { fill: '#f00', fontWeight: 'bold' });
+                this.physics.add.overlap(player, portal, () => {
+                    player.setPosition(targetX, 350);
+                    this.cameras.main.scrollX = targetX - (this.cameras.main.width / 2);
+                    this.cameras.main.flash(500, 255, 0, 0);
+                }, null, this);
+            };
+            createPortal(200, 300, 'BOSS WARP', bossRoomShift - 400);
+            createPortal(300, 300, 'SEC 1 WARP', section1Shift - 400);
+            createPortal(400, 300, 'SEC 2 WARP', section2Shift - 400);
+            createPortal(500, 300, 'SEC 3 WARP', section3Shift - 400);
+            createPortal(600, 300, 'SEC 4 WARP', section4Shift - 400);
+            
+            // TRAPS
+            this.trapList = []; // For updating visuals
+            this.shearHazards = this.physics.add.group({ allowGravity: false, immovable: true });
+
+            // Spawn Traps
+            //createShearTrap(this, 1150, mainFloorY, 0);
+            // Section 1 trap cluster
+            createShearTrap(this, section1Shift + 1100, mainFloorY, 0);
+            createShearTrap(this, section1Shift + 1900, mainFloorY, 0);
+            // Section 2 trap cluster
+            createShearTrap(this, section2Shift + 760, mainFloorY, 330);
+            createShearTrap(this, section2Shift + 1080, mainFloorY, 0);
+            createShearTrap(this, section2Shift + 1400, mainFloorY, 0);
+            // Section 3 trap cluster
+            createShearTrap(this, section3Shift + 1100, mainFloorY, 0);
+            createShearTrap(this, section3Shift + 1450, mainFloorY, 180);
+
+            // Global State Timer
+            this.trapState = 'charging'; 
+            this.time.addEvent({
+                delay: 3000,
+                callback: () => {
+                    const isActive = this.trapState === 'charging';
+                    this.trapState = isActive ? 'active' : 'charging';
+
+                    this.trapList.forEach(t => {
+                        if (isActive) {
+                            t.floorEmit.play('shear_emit_active');
+                            t.ceilingEmit.play('shear_emit_active');
+                            t.beam.setAlpha(1);
+                            t.hazard.enableBody = true; // Turn on damage
+                        } else {
+                            t.floorEmit.play('shear_emit_charge');
+                            t.ceilingEmit.play('shear_emit_charge');
+                            t.beam.setAlpha(0.3); // Low opacity warning
+                            t.hazard.enableBody = false; // Turn off damage
+                        }
+                    });
+                },
+                loop: true
+            });
+
+            // Damage Collider for Shear Traps
+            this.physics.add.overlap(player, this.shearHazards, (p, h) => {
+                if (this.trapState === 'active' && !p.isInvulnerable) {
+                    damagePlayer(p, h, this, 20);
+                    p.isInvulnerable = true;
+
+                    // Instant Position Snap
+                    // Move the player 5 pixels away from the beam immediately 
+                    // to prevent overlapping for multiple frames.
+                    if (p.x < h.x) {
+                        p.x -= 10; 
+                        p.body.setVelocityX(-500);
+                    } else {
+                        p.x += 10;
+                        p.body.setVelocityX(500);
+                    }
+
+                    // Stun
+                    this.controlsEnabled = false;
+                    this.time.delayedCall(150, () => {
+                        this.controlsEnabled = true;
+                    });
+
+                    // Visuals
+                    p.setTint(0xff0000);
+                    this.tweens.add({
+                        targets: p,
+                        alpha: 0,
+                        duration: 50,
+                        yoyo: true,
+                        repeat: 5,
+                        onComplete: () => { p.alpha = 1; p.isInvulnerable = false; p.clearTint(); }
+                    });
+                }
+            });
+            // Shear Trap for Projectiles
+            this.physics.add.collider(tubes, this.shearHazards, (tube, hazard) => {
+                if (this.trapState === 'active') {
+                    // Create a small impact effect
+                    let spark = this.add.sprite(tube.x, tube.y, 'shearLaser02').setScale(0.5);
+                    this.tweens.add({
+                        targets: spark,
+                        alpha: 0,
+                        scale: 2,
+                        duration: 100,
+                        onComplete: () => spark.destroy()
+                    });
+
+                    tube.destroy(); 
+                }
+            }, (tube, hazard) => {
+                // Process Callback: Only collide if the trap is active
+                return this.trapState === 'active';
+            }, this);
+
+            // --- BACKGROUND DIALOGUE TRIGGERS ---
+            this.vignette1_BG = this.add.image(1050, 200, 'rnd_bg').setDepth(10);
+            this.vignette1_Char = this.add.sprite(1050 - 125, 200, 'intro_RnD').setDepth(11);
+            this.vignette1_Char.play('rnd_speak');
+
+            addDialogueTrigger(this, 900, mainFloorY, 100, 450, () => {
+                typeSequentialVignette(this, 1050, 275, [
+                    "This pharmaceutical asset needs to reach phase II by next quarter.",
+                    "We're seeing increased shearing with the new formulation.",
+                    "It's taken too long to scale past 200 liters.",
+                    "A new transfection reagent should arrive today.",
+                    "I ordered enhancers with it, too.",
+                    "I saw their data at a conference last year.",
+                    "They had a really nice booth",
+                    "So I followed them on LinkedIn and their content was actually pretty good",
+                    "Where is our process engineer? He was supposed to help with scaling.",
+                    "Is that him just standing in the suite, staring at us?",
+                    "It is... He's just staring at us.",
+                    "Can he hear us?",
+                    "Remind me to look at his performance review.",
+                    "If he can scale this to 1000 liters, he can stare all he wants.",
+                    "Is he looking at the open microcentrifuge tube? He better not throw it."
+                ]);
+            });
+
+            this.vignette2_BG = this.add.image(1600, 200, 'biz_bg').setDepth(10);
+            this.vignette2_Char = this.add.sprite(1600 + 125, 200, 'intro_biz').setDepth(11);
+            this.vignette2_Char.play('biz_speak');
+
+            addDialogueTrigger(this, 1400, mainFloorY, 100, 450, () => {
+                typeSequentialVignette(this, 1600, 275, [
+                    "We need to lower the cost per-dose for this asset.",
+                    "An IND Delay would be a disaster for our market position.",
+                    "We want to scale up, not out.",
+                    "If we increase our suite turnover, we can hire more MSAT people.",
+                    "Do we have a regulatory strategy for this asset?",
+                    "We need to find a residual reagent assay fast.",
+                    "I want to see a vendor comparison for those kits by the end of the week.",
+                    "I saw a presentation on regulatory expectations at a conference last year.",
+                    "I followed that speaker on LinkedIn and their content was actually pretty good.",
+                    "Is that Process Engineer just staring at us?",
+                    "After the RnD leadership meeting, I have to ask them how they hire these people.",
+                    "This is why we have a time-card system."
+                ]);
+            });
+
+            // SECTION 3 NPC - MIRUS FAS REP
+            // 1. Setup Groups and Aliases
+            this.virusgenProjectiles = this.physics.add.group();
+            this.capsids = capsids; // Ensure this alias is set before triggers
+
+            // 2. Spawn FAS NPC
+            this.mirusFAS1 = this.add.sprite(section3Shift + 1450, 125, 'mirusFAS_npc')
+                .setOrigin(0.5, 1)
+                .setDepth(30);
+
+            // 3. Add Collider (Projectiles hit capsids)
+            this.physics.add.overlap(this.virusgenProjectiles, this.capsids, (projectile, capsid) => {
+                projectile.destroy();
+                capsid.destroy();
+                this.score += 10;
+                this.scoreText.setText('Score: ' + this.score);
+            }, null, this);
+
+            // 4. Trigger: Passive Dialogue (Floor to Ceiling)
+            addDialogueTrigger(this, section3Shift + 1000, 300, 100, 600, () => {
+                typeSequentialVignette(this, section3Shift + 1275, 75, [
+                    "You get a Field Application Scientist from Mirus Bio!",
+                    "Plan your tests and scaling strategy with me. I can help!",
+                    "I'll come onsite to help you optimize your transfection conditions.",
+                    "I'm flattered that you want to talk more now...",
+                    "but you didn't extend your complex delivery window with any enhancers.",
+                    "If you aren't serious about titer, maybe don't reach out to me for help."
+                ]);
+            });
+
+            // 5. Trigger: Shooting Activation (Floor to Ceiling)
+            addDialogueTrigger(this, section3Shift + 1500, 300, 100, 600, () => {
+                if (this.mirusTimer) return; // Prevent double-looping
+
+                this.mirusTimer = this.time.addEvent({
+                    delay: 500,
+                    callback: () => {
+                        // Check for valid, active targets in range
+                        let targets = this.capsids.getChildren().filter(c => 
+                            c.active === true && 
+                            c.visible === true && 
+                            c.x > this.mirusFAS1.x && 
+                            c.x < (this.mirusFAS1.x + 550)
+                        );
+                        
+                        if (targets.length > 0) {
+                            mirusShoot(this);
+                        } else {
+                            // STOP shooting logic
+                            if (this.mirusTimer) {
+                                this.mirusTimer.remove();
+                                this.mirusTimer = null;
+                            }
+                            this.mirusFAS1.stop();
+                            this.mirusFAS1.setFrame(0);
+                        }
+                    },
+                    callbackScope: this,
+                    loop: true
+                });
+            });
+
+            // REGULATORY TRIGGERS AND MORE
+            // REGULATORY NPC SETUP
+            this.regulatoryNPC = this.physics.add.sprite(0, 0, 'mirusReg_npc')
+                .setOrigin(0.5, 1)
+                .setDepth(100)
+                .setVisible(false);
+
+            this.regulatoryNPC.body.setAllowGravity(false);
+            this.regFollowing = false;
+            this.activeRegText = null;
+
+            // TRIGGER
+            addDialogueTrigger(this, this.section4Shift + 2850, 300, 100, 600, () => {
+                if (!this.regFollowing) {
+                    // Force spawn 400px behind the player's current position
+                    this.regulatoryNPC.x = this.player.x - 400;
+                    this.regulatoryNPC.y = mainFloorY;
+                    this.regulatoryNPC.setVisible(true);
+                    this.regFollowing = true;
+                    
+                    typeSequentialVignette(this, this.regulatoryNPC.x, this.regulatoryNPC.y - 130, [
+                        "Our recent residual reagent assays showed zero issues; keep that momentum going!",
+                        "You're assigned FAS member will be onsite to help you scale to 1000 liters.",
+                        "We filed all recent documents on time; no delays means we're on track for your scale-up!", 
+                        "Thanks to thorough analytical validation, we've eliminated CMC shortcomings; your path to success is clear!",
+                        "Material selection is spot on; the approved reagents will enhance your production efficiency!",
+                        "Documentation is tight; every step is recorded, ensuring a smooth regulatory review ahead!",
+                        "With our solid track record, we're ready to tackle this scale-up; let's achieve those targets together!",
+                        "Just because we're on-schedule doesn't mean you can listen to me all day. Go work on scaling that process!"
+                    ]);
+                }
+            });
+
+            // // Full character + background
+            // startPassiveDialogue(this, 1200, 450, "Check the AAV titer!"); 
+            // // Defaults to true, true
+
+            // // Character Only
+            // startPassiveDialogue(this, 1200, 450, "Just the character here.", false, true);
+
+            // // Plain text
+            // startPassiveDialogue(this, 1200, 450, "Pure info stream.", false, false);
+
+            // --- DEBUG GRID HELPER ---
+            const gridGraphics = this.add.graphics(); 
+            gridGraphics.lineStyle(2, 0x00ff00, 0.5); 
+
+            // Vertical Lines & X-Coordinates
+            for (let x = 0; x < 12000; x += 400) {
+                gridGraphics.lineBetween(x, 0, x, 800);
+                this.add.text(x + 5, 10, x, { fontSize: '14px', fill: '#00ff00' }); 
+            }
+            // Horizontal Lines & Y-Coordinates
+            for (let y = 0; y < 800; y += 100) {
+                gridGraphics.lineBetween(0, y, 12000, y);
+                this.add.text(5, y + 5, y, { fontSize: '14px', fill: '#00ff00' }).setScrollFactor(0);
+            }
+            
+            // Yellow hazard trap
+            // let trap = this.add.rectangle(5000, 410, 80, 20, 0xffff00);
+            // this.physics.add.existing(trap, true);
+            // COMMENTED OUT FOR TESTING - CAN RE-ENABLE ONCE PLAYER HP IS FUNCTIONAL
+            // this.physics.add.overlap(player, trap, () => {
+            //     damagePlayer(this, 0.2);
+            // });
+
+            //7.INPUTS & HUD
+            cursors = this.input.keyboard.createCursorKeys();
+            this.fireKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+
+            this.score = 0;
+            this.health = 100;
+            this.timeLeft = 900;
+
+            this.scoreText = this.add.text(20, 20, 'CAPSIDS CAPTURED: 0', { fontSize: '18px', fill: '#00ff00', backgroundColor: '#000000' }).setScrollFactor(0).setDepth(3000).setVisible(false);
+            this.healthText = this.add.text(20, 80, 'INTEGRITY: 100%', { fontSize: '18px', fill: '#00ff00' }).setScrollFactor(0).setDepth(3000).setVisible(false);
+
+            // Timer
+            this.timerText = this.add.text(20, 50, 'TIME: ' + this.timeLeft, { fontSize: '18px', fill: '#fff' }).setScrollFactor(0).setDepth(3000).setVisible(false);
+            this.time.addEvent({
+                delay: 1000,
+                callback: () => {
+                    if (this.challengeStarted) { 
+                        this.timeLeft--;
+                        if (this.timerText) {
+                            this.timerText.setText('TIME: ' + this.timeLeft);
+                        }
+                    }
+                },
+                callbackScope: this,
+                loop: true
+            });
+
+            // Tool UI
+            this.toolUI = this.add.container(400, 550).setScrollFactor(0).setDepth(2000);
+            this.reagentDisplay = this.add.sprite(0, 0, 'toolUIimg', 0);
+            this.toolUI.add(this.reagentDisplay)
+            this.toolUI.setVisible(false);
+            
+            // 8. PHYSICS INTERACTIONS
+            this.physics.add.collider(player, this.platforms);
+            this.physics.add.collider(player, this.movingPlatforms);
+            this.physics.add.collider(tubes, this.platforms, (t) => t.destroy());
+            
+            this.physics.add.overlap(tubes, capsids, hitCapsid, null, this);
+            this.physics.add.overlap(tubes, boss, hitBoss, null, this);
+            this.physics.add.overlap(player, capsids, damagePlayer, null, this);
+            // this.physics.add.overlap(player, trap, () => damagePlayer(this, 0.2));
+            this.physics.add.overlap(player, this.introTrigger, () => { startIntroDialogue(this); this.introTrigger.destroy(); }, null, this);
+
+            // 9. CAMERA
+            this.physics.world.setBounds(0, 0, bossRoomEnd + 20, 800);
+            this.cameras.main.setBounds(0, 0, bossRoomEnd + 20, 900);
+            this.cameras.main.startFollow(player, true, 0.1, 0.1, 0, 100);
+            this.cameras.main.setDeadzone(50, 50);
+
+            // 10. BOSS HELPER LOGIC - POWERUPS
+            function spawnHelperPowerup(scene) {
+                scene.time.addEvent({
+                    delay: Phaser.Math.Between(10000, 20000), // 10-20 seconds
+                    callback: () => {
+                        if (bossHP <= 0) return;
+
+                        let x = Phaser.Math.Between(bossRoomShift + 100, bossRoomShift + 600);
+                        let type = Phaser.Math.RND.pick(['revit', 'stabilizer']);
+                        let pUp = scene.physics.add.sprite(x, -50, type); // Drop from sky
+                        
+                        scene.physics.add.overlap(player, pUp, () => {
+                            applyBossPowerup(type, scene);
+                            pUp.destroy();
+                        });
+                    },
+                    loop: true
+                });
+            }
+
+            
+            // 11. START SCREEN
+
+            this.startBG = this.add.sprite(400, 225, 'start_bg').setDepth(10000).setScrollFactor(0);
+            this.startBG.play('start_anim');
+
+            this.startPrompt = this.add.text(400, 400, 'PRESS SPACE TO OPTIMIZE TITER', {
+                fontSize: '20px', fill: '#fff', backgroundColor: '#000'
+            }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+
+            // Stop physics until started
+            this.physics.pause();
+
+            this.input.keyboard.once('keydown-SPACE', () => {
+                this.gameStarted = true;
+                this.startBG.destroy();
+                this.startPrompt.destroy();
+                this.physics.resume();
+            });
+
+
+            /////////
+            
+            // --- DECOR & BACKGROUND ---
+            // SECTION A: MAIN PATH
+            // Starts at 0, ends at the boss room entrance
+            this.add.tileSprite(0, mainFloorY, bossRoomShift, 350, 'BasementTile')
+                .setOrigin(0, 0)
+                .setDepth(-10);
+
+            // SECTION B: BOSS ROOM 
+            // Starts at bossRoomShift, positioned lower to stay beneath the boss floor
+            this.add.tileSprite(bossRoomShift, bossFloorY, 800, 350, 'BasementTile')
+                .setOrigin(0, 0)
+                .setDepth(-10);
+
+            // // HUD intro visibility
+            // this.scoreText.setVisible(false);
+            // this.healthText.setVisible(false);
+            // this.timerText.setVisible(false);
+            // this.toolUI.setVisible(false);
+        }
+
+        function update(time) {
+            if (this.controlsEnabled && cursors) {
+                // --- 1. MOVEMENT ---
+                // Friction: Limit speed to 100 during intro; allow 200 after trigger.
+                let currentMaxSpeed = this.speedLimited ? 125 : 200;
+
+                if (cursors.left.isDown) {
+                    player.body.setVelocityX(-currentMaxSpeed);
+                    player.anims.play('walk', true);
+                    player.setFlipX(true);
+                } else if (cursors.right.isDown) {
+                    player.body.setVelocityX(currentMaxSpeed);
+                    player.anims.play('walk', true);
+                    player.setFlipX(false);
+                } else {
+                    player.body.setVelocityX(0);
+                    if (player.anims.currentAnim && player.anims.currentAnim.key !== 'throw') {
+                        player.anims.play('idle');
+                    }
+                }
+
+                // --- 2. JUMPING ---
+                let isGrounded = player.body.blocked.down || player.body.touching.down;
+                let jumpJustPressed = Phaser.Input.Keyboard.JustDown(cursors.up);
+                
+                // Check if the player is currently inside a capsid
+                let overlappingCapsid = capsids.getChildren().some(capsid => {
+                    return Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), capsid.getBounds());
+                });
+
+                // Use jumpJustPressed instead of isDown
+                if (jumpJustPressed && isGrounded && !overlappingCapsid) {
+                    player.body.setVelocityY(-450);
+                }
+
+                // --- 3. SHOOTING ---
+                if (this.currentWeapon !== null) {
+                    // Define stats HERE so it is available for the math below
+                    let stats = this.weaponStats[this.currentWeapon]; 
+                    
+                    // Check if revITActive is global or this.revITActive
+                    let activeRevIT = this.revITActive; 
+                    let actualFireRate = activeRevIT ? stats.fireRate / 2 : stats.fireRate;
+
+                    if (this.fireKey.isDown && time > this.lastFired) {
+                        player.anims.play('throw', true);
+                        throwTube(this); // Ensure this function is defined
+                        this.lastFired = time + actualFireRate;
+                    }
+                }
+            } else {
+                // Fallback for disabled controls
+                if (player && player.body) {
+                    player.body.setVelocityX(0);
+                    player.anims.play('idle');
+                }
+            }
+            // --- GAME START
+            if (!this.gameStarted) {
+                if (Phaser.Input.Keyboard.JustDown(this.spaceBar)) {
+                    this.gameStarted = true;
+                    this.startScreen.destroy();
+                    // Optional: Start your background music here
+                }
+                return; // Stop the rest of the update loop from running
+            }
+
+            // --- 4. PROJECTILE CLEANUP ---
+            tubes.getChildren().forEach(tube => {
+                if (tube.x > this.cameras.main.scrollX + 1000 || tube.x < this.cameras.main.scrollX - 200) {
+                    tube.destroy();
+                }
+            });
+            // CAPSID BOBBING
+            if (!this.stabilizerActive) {
+                capsids.getChildren().forEach(capsid => {
+                    capsid.y = capsid.baseY + Math.sin(time * 0.003) * 30;
+                });
+            } //else {
+                // // Optional: If you want them to 'shiver' while frozen
+                // capsids.getChildren().forEach(capsid => {
+                //     capsid.y += Math.sin(time * 0.1) * 0.5; 
+                // });
+            // SHEAR TRAP ANIMATION
+            this.trapList.forEach(t => {
+                if (this.trapState === 'active') {
+                    // Fast scroll when lethal
+                    t.beam.tilePositionY -= 15;
+                } else {
+                    // Slow flicker scroll when charging
+                    t.beam.tilePositionY -= 2;
+                }
+            });
+
+            this.movingPlatform.getChildren().forEach(platform => {
+                if (!this.stabilizerActive) {
+                    platform.x += platform.speed * platform.direction;
+                    if (platform.x >= platform.startX + platform.range) platform.direction = -1;
+                    if (platform.x <= platform.startX) platform.direction = 1;
+
+                    // Sticky Platforms: Move player with the platform
+                    if (player.body.touching.down && Phaser.Geom.Intersects.RectangleToRectangle(player.getBounds(), platform.getBounds())) {
+                        player.x += platform.speed * platform.direction;
+                    }
+                }
+            });
+
+            // REGULATORY NPC
+            if (this.regFollowing && this.regulatoryNPC) {
+                const stopPoint = this.bossRoomShift - 200;
+                const targetX = this.player.x - 64; 
+
+                // Sync Text Position (using your new -130 height)
+                if (this.activeRegText && this.activeRegText.active) {
+                    this.activeRegText.x = this.regulatoryNPC.x;
+                    this.activeRegText.y = this.regulatoryNPC.y - 130;
+                }
+
+                if (this.regulatoryNPC.x < stopPoint) {
+                    this.regulatoryNPC.body.setVelocityX(this.player.body.velocity.x);
+
+                    if (this.regulatoryNPC.x < targetX - 10) {
+                        this.regulatoryNPC.body.setVelocityX(this.player.body.velocity.x + 150);
+                    }
+                    
+                    if (Math.abs(this.regulatoryNPC.body.velocity.x) > 0.1) {
+                        this.regulatoryNPC.play('reg_walk', true);
+                    } else {
+                        this.regulatoryNPC.anims.stop();
+                        this.regulatoryNPC.setFrame(0);
+                    }
+                } else {
+                    // HIT BORDER: Hard reset to idle
+                    this.regFollowing = false;
+                    this.regulatoryNPC.body.setVelocityX(0);
+                    this.regulatoryNPC.anims.stop(); // Stops the walk cycle
+                    this.regulatoryNPC.setFrame(0);  // Forces the still/idle frame
+                    
+                    if (this.activeRegText) {
+                        this.activeRegText.destroy();
+                        this.activeRegText = null;
+                    }
+                }
+            }
+
+            // BOSS TRIGGER
+            // Add bossStarted = false at the top of your script or in create()
+            let dist = Phaser.Math.Distance.Between(player.x, player.y, boss.x, boss.y);
+
+            if (dist < 800 && !this.bossStarted) { 
+                console.log("BOSS TRIGGERED!");
+                this.bossStarted = true; // Lock the trigger immediately
+                startBossLogic(this);
+            }
+            // --- DEBUG ----
+            // DEBUG MOUSE
+            if (this.input.activePointer.isDown) {
+                console.log(`Mouse X: ${Math.floor(this.input.activePointer.worldX)}, Y: ${Math.floor(this.input.activePointer.worldY)}`);
+            }
+            // DEBUG: Press 'B' to instantly win and test the Modal
+            if (Phaser.Input.Keyboard.JustDown(this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.B))) {
+                console.log("DEBUG: FORCING BOSS DEATH");
+                bossHP = 0; 
+                totalScore = 1250000; // Testing the 'E' format (1.25e+6)
+                endGame(this); 
+            }
+        }
+
+        function typeSequentialVignette(scene, x, y, messages, index = 0) {
+            if (index >= messages.length) {
+                scene.activeRegText = null;
+                return;
+            }
+
+            let txt = scene.add.text(x, y, '', {
+                fontSize: '16px',
+                fill: '#ffffff',
+                wordWrap: { width: 320 },
+                fontFamily: 'Courier New',
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(0.5).setDepth(100);
+
+            scene.activeRegText = txt;
+
+            let i = 0;
+            let currentMessage = messages[index];
+
+            scene.time.addEvent({
+                delay: 30,
+                callback: () => {
+                    // Guard: Check if txt still exists before updating
+                    if (!txt || !txt.active) return;
+
+                    if (i < currentMessage.length) {
+                        txt.text += currentMessage[i++];
+                    }
+                    
+                    if (i === currentMessage.length) {
+                        // Guard: Only start tween if txt is valid
+                        scene.tweens.add({ 
+                            targets: txt, 
+                            alpha: 0, 
+                            delay: 5000, 
+                            duration: 1000, 
+                            onComplete: () => {
+                                // Guard: Check one last time before destroying and recursing
+                                if (txt && txt.active) {
+                                    txt.destroy();
+                                    
+                                    let hasNext = index + 1 < messages.length;
+                                    // Use regulatoryNPC position for next line to stay in sync
+                                    let nextX = scene.regulatoryNPC ? scene.regulatoryNPC.x : x;
+                                    let nextY = scene.regulatoryNPC ? (scene.regulatoryNPC.y - 130) : y;
+                                    
+                                    if (hasNext) {
+                                        typeSequentialVignette(scene, nextX, nextY, messages, index + 1);
+                                    } else {
+                                        scene.activeRegText = null;
+                                    }
+                                }
+                            }
+                        });
+                    }
+                },
+                repeat: currentMessage.length - 1
+            });
+        }
+
+        function addDialogueTrigger(scene, x, y, width, height, callback) {
+            let trigger = scene.add.zone(x, y, width, height);
+            scene.physics.add.existing(trigger, true);
+            scene.physics.add.overlap(player, trigger, () => {
+                callback();
+                trigger.destroy();
+            }, null, scene);
+        }
+
+        function startBlockingDialogue(scene, message, onComplete = null) {
+            scene.controlsEnabled = false;
+            player.setVelocityX(0);
+            player.anims.play('idle');
+
+            // Mechanical Fix: Y moved from 225 to 150 to sit 75px higher
+            let modal = scene.add.container(500, 175).setScrollFactor(0).setDepth(2000);
+
+            // 1. Portrait now on the right (+150)
+            let portrait = scene.add.image(150, 0, 'labmatePortrait').setScale(0.5);
+            
+            // 2. Speech Bubble shifted left (-350 to center it under the text area)
+            let speechBubble = scene.add.graphics();
+            speechBubble.fillStyle(0x000000, 0.85).fillRoundedRect(-350, -60, 450, 140, 10);
+
+            // 3. Text Object shifted left (-330)
+            let txt = scene.add.text(-330, -40, '', { 
+                fontSize: '18px', 
+                fill: '#ffffff', 
+                wordWrap: { width: 400 }, 
+                fontFamily: 'Courier New'
+            });
+
+            modal.add([speechBubble, portrait, txt]);
+
+            let i = 0;
+            scene.time.addEvent({
+                delay: 30,
+                callback: () => {
+                    txt.text += message[i];
+                    i++;
+                    if (i === message.length) {
+                        // Prompt moved to align with the left-justified text
+                        let prompt = scene.add.text(-125, 55, '[ SPACE ]', { 
+                            fontSize: '14px', 
+                            fill: '#00ff00' 
+                        }).setOrigin(0.5);
+                        modal.add(prompt);
+                        
+                        scene.input.keyboard.once('keydown-SPACE', () => {
+                            modal.destroy();
+                            scene.controlsEnabled = true;
+                            if (onComplete) onComplete();
+                        });
+                    }
+                },
+                repeat: message.length - 1
+            });
+        }
+
+        function startPassiveVignette(scene, x, y, message, textureKey, animKey, bgKey) {
+            // Container at your specified center point (1150, 200)
+            let bubble = scene.add.container(x, y).setDepth(10);
+
+            // 1. Background (400x96) - Native scale
+            let bg = scene.add.image(0, 0, bgKey);
+            
+            // 2. Animated Portrait (64x64) 
+            // Positioned 150px to the right of center to stay inside the 400px BG
+            let portrait = scene.add.sprite(150, 0, textureKey);
+            portrait.play(animKey);
+            
+            // 3. Text 
+            // Positioned to the left of the portrait
+            let txt = scene.add.text(-40, 0, message, {
+                fontSize: '16px',
+                fill: '#ffffff',
+                align: 'left',
+                wordWrap: { width: 280 },
+                fontFamily: 'Courier New',
+                stroke: '#000000',
+                strokeThickness: 2
+            }).setOrigin(0.5);
+
+            bubble.add([bg, portrait, txt]);
+
+            // Mechanical animation: Subtle hang time then fade
+            scene.tweens.add({
+                targets: bubble,
+                alpha: { from: 1, to: 0 },
+                delay: 5000, // Remains solid for 5 seconds while player walks past
+                duration: 1000,
+                onComplete: () => bubble.destroy()
+            });
+        }
+
+        function mirusShoot(scene) {
+            if (!scene.mirusFAS1) return;
+
+            scene.mirusFAS1.play('mirus_throw', true);
+
+            scene.time.delayedCall(150, () => {
+                // Use 'tubeV' to match your scientist asset
+                let p = scene.virusgenProjectiles.create(
+                    scene.mirusFAS1.x + 30, 
+                    scene.mirusFAS1.y - 45, 
+                    'tubeV' 
+                );
+                
+                if (p && p.body) {
+                    p.setDepth(100);
+                    p.body.setAllowGravity(false);
+                    p.setVelocityX(800);
+                    
+                    // Range Limit: Kill the projectile after 500px of travel
+                    // At 800 velocity, 500px takes exactly 625ms
+                    scene.time.delayedCall(625, () => {
+                        if (p.active) p.destroy();
+                    });
+                }
+            });
+        }
+
+        function throwTube(scene) {
+            let activeWeapon = scene.currentWeapon;
+            if (!activeWeapon) return;
+            let stats = scene.weaponStats[activeWeapon];
+
+            // Use scene.revITActive, NOT this.revITActive
+            let isRevIT = scene.revITActive; 
+
+            const fire = (yOffset) => {
+                let direction = player.flipX ? -1 : 1;
+                let offsetX = direction * 50;
+                let projectile = tubes.create(player.x + offsetX, player.y, stats.texture);
+                
+                if (projectile) {
+                    projectile.body.setAllowGravity(false);
+                    projectile.body.setVelocity(stats.speed * direction, yOffset);
+                    projectile.setAngularVelocity(500);
+
+                    if (isRevIT) {
+                        if (activeWeapon === 'VirusGEN') projectile.setTint(0xff00ff);
+                        if (activeWeapon === 'PolymerF') projectile.setTint(0x888888);
+                    }
+
+                    scene.time.delayedCall(2000, () => {
+                        if (projectile.active) projectile.destroy();
+                    });
+                }
+            };
+
+            if (isRevIT) {
+                fire(0);    // Straight
+                fire(-200); // Angle Up
+                fire(200);  // Angle Down
+            } else {
+                fire(0);
+            }
+        }
+
+        function hitCapsid(tube, capsid) {
+            // 1. Get the scene from the tube itself
+            let scene = tube.scene; 
+            let stats = weaponStats[currentWeapon];
+
+            capsid.hp -= stats.damage;
+            capsid.setTint(0xff00ff); 
+
+            // Use scene.time instead of this.time
+            scene.time.delayedCall(100, () => {
+                if (capsid.active) capsid.clearTint();
+            });
+
+            tube.destroy(); 
+
+            if (capsid.hp <= 0) {
+                // 2. Use scene.score instead of this.score
+                scene.score += 1;
+                scene.scoreText.setText('CAPSIDS CAPTURED: ' + scene.score);
+                
+                captureSequence(capsid);
+            }
+        }
+        
+        function captureSequence(target) {
+            console.log("Target successfully captured!");
+            target.destroy();
+            // Later: You can trigger a "sparkle" or "collect" animation here!
+            totalScore += 1;
+        }
+        function createPlatform(scene, platformsGroup, x, y, widthInTiles) {
+            // 1. Create the Left Edge (Frame 0)
+            platformsGroup.create(x, y, 'platform02tiles', 0);
+            // 2. Create the Middle Sections (Frame 1)
+            // We loop through the middle (starting at index 1, ending before the last tile)
+            for (let i = 1; i < widthInTiles - 1; i++) {
+                platformsGroup.create(x + (i * 64), y, 'platform02tiles', 1);
+            }
+            // 3. Create the Right Edge (Frame 2)
+            platformsGroup.create(x + ((widthInTiles - 1) * 64), y, 'platform02tiles', 2);
+        }
+
+        function createVerticalWall(scene, x, yStart, numMiddleSegments, group) {
+            // 1. Top Cap (Frame 2)
+            let top = group.create(x, yStart, 'verticalWall', 2);
+            
+            // 2. Middle Segments (Frame 1)
+            for (let i = 1; i <= numMiddleSegments; i++) {
+                group.create(x, yStart + (i * 64), 'verticalWall', 1);
+            }
+            
+            // 3. Bottom Cap (Frame 0)
+            let bottomY = yStart + ((numMiddleSegments + 1) * 64);
+            let bottom = group.create(x, bottomY, 'verticalWall', 0);
+            
+            return { top, bottom, bottomY }; // Returns data in case we need to know the wall's end point
+        }
+        
+        function damagePlayer(player, hazard, scene, amount) {
+            if (!scene) return;
+            scene.health -= amount;
+            if (scene.healthText) {
+                // Keeps it clean: No negatives, no decimals
+                let displayHealth = Math.max(0, Math.floor(scene.health));
+                scene.healthText.setText('INTEGRITY: ' + displayHealth + '%');
+            }
+            player.setTint(0xff0000);
+            scene.time.delayedCall(100, () => {
+                if (player) player.clearTint();
+            });
+
+            if (scene.health <= 0) {
+                scene.physics.pause();
+                scene.controlsEnabled = false; // Stop player input
+                
+                let gameOver = scene.add.text(400, 300, 'TITER LOSS DETECTED\nGAME OVER', { 
+                    fontSize: '48px', 
+                    fill: '#ff0000', 
+                    align: 'center', 
+                    backgroundColor: '#000',
+                    padding: { x: 20, y: 20 }
+                });
+                gameOver.setOrigin(0.5).setScrollFactor(0).setDepth(3000);
+                
+                setTimeout(() => { window.location.reload(); }, 3000);
+            }
+        }
+
+        function spawnLabmate(scene, x, y, flip = false) {
+            // Create the sprite
+            let lm = scene.add.sprite(x, y, 'labmateIdle');
+            
+            // Mechanics: Anchor to feet, set depth behind player/boss but in front of BG
+            lm.setOrigin(0.5, 1);
+            lm.setDepth(15);
+            lm.flipX = flip;
+
+            // Play the pre-defined idle animation
+            lm.play('labmate_idle_anim');
+
+            return lm;
+        }
+
+        function startIntroDialogue(scene) {
+            console.log("Labmate dialogue started.");
+            // 1. Freeze the scientist
+            scene.controlsEnabled = false;
+            player.setVelocityX(0);
+            player.anims.play('idle');
+
+            // 2. Create the Modal Container (Positioned at your block)
+            // Adjust 600, 200 to match the "Block" illustration coordinates
+            scene.introModal = scene.add.container(600, 200);
+            scene.introModal.setDepth(2000);
+            scene.introModal.setScrollFactor(0);
+            scene.introModal.setPosition(400, 225); // Center of the screen
+
+            // 3. Add Labmate Portrait
+            // If you don't have the asset yet, you can comment this line out
+            let portrait = scene.add.image(-150, 0, 'labmatePortrait').setScale(0.5);
+            
+            // 4. Speech Bubble Backing
+            let speechBubble = scene.add.graphics();
+            speechBubble.fillStyle(0x000000, 0.8);
+            speechBubble.fillRoundedRect(-100, -50, 450, 120, 10);
+
+            // 5. The Text Object
+            let txt = scene.add.text(-80, -30, '', { 
+                fontSize: '18px', 
+                fill: '#ffffff', 
+                wordWrap: { width: 400 },
+                fontFamily: 'Arial'
+            });
+
+            scene.introModal.add([speechBubble, portrait, txt]);
+
+            let fullMessage = "Hey, I need your help on an AAV therapeutic I've been developing. Meet me at my bench and I'll catch you up.";
+            let i = 0;
+
+            // 6. Typewriter Effect
+            scene.time.addEvent({
+                delay: 40,
+                callback: () => {
+                    txt.text += fullMessage[i];
+                    i++;
+                    if (i === fullMessage.length) {
+                        // Show the "Space" prompt only after text is done
+                        let prompt = scene.add.text(125, 45, '[ Press SPACE to continue ]', { 
+                            fontSize: '14px', 
+                            fill: '#00ff00' 
+                        })
+                        prompt.setOrigin(0.5);
+                        scene.introModal.add(prompt);
+                        scene.input.keyboard.once('keydown-SPACE', () => {
+                            scene.introModal.destroy();
+                            scene.controlsEnabled = true;
+                            console.log("Dialogue complete. Controls restored.");
+                        });
+                    }
+                },
+                repeat: fullMessage.length - 1
+            });
+            if (scene.door1A) {
+                scene.tweens.add({
+                    targets: scene.door1A,
+                    y: scene.door1A.y - 80, // Slides the door UP
+                    duration: 2000,
+                    ease: 'Power2'
+                });
+                console.log("Security clearance granted. Door 1 opening.");
+            }
+        }
+        function startConversation4(scene) {
+            console.log("Labmate dialogue 2 started.");
+            // 1. Freeze the scientist
+            scene.controlsEnabled = false;
+            player.setVelocityX(0);
+            player.anims.play('idle');
+
+            // 2. Create the Modal Container (Positioned at your block)
+            // Adjust 600, 200 to match the "Block" illustration coordinates
+            scene.introModal = scene.add.container(600, 200);
+            scene.introModal.setDepth(2000);
+            scene.introModal.setScrollFactor(0);
+            scene.introModal.setPosition(400, 225); // Center of the screen
+
+            // 3. Add Labmate Portrait
+            // If you don't have the asset yet, you can comment this line out
+            let portrait = scene.add.image(-150, 0, 'labmatePortrait').setScale(0.5);
+            
+            // 4. Speech Bubble Backing
+            let speechBubble = scene.add.graphics();
+            speechBubble.fillStyle(0x000000, 0.8);
+            speechBubble.fillRoundedRect(-100, -50, 450, 120, 10);
+
+            // 5. The Text Object
+            let txt = scene.add.text(-80, -30, '', { 
+                fontSize: '18px', 
+                fill: '#ffffff', 
+                wordWrap: { width: 400 },
+                fontFamily: 'Arial'
+            });
+
+            scene.introModal.add([speechBubble, portrait, txt]);
+
+            let fullMessage = "Start delivering nucleic acid into cells via virus transfection. We need to maximize our titer and percentage of full-capsids. Use POLYMER P. It has been a reliable method for decades. Capture as many full capsids as possible.";
+            let i = 0;
+
+            // 6. Typewriter Effect
+            scene.time.addEvent({
+                delay: 40,
+                callback: () => {
+                    txt.text += fullMessage[i];
+                    i++;
+                    if (i === fullMessage.length) {
+                        // Show the "Space" prompt only after text is done
+                        let prompt = scene.add.text(125, 45, '[ Press SPACE to continue ]', { 
+                            fontSize: '14px', 
+                            fill: '#00ff00' 
+                        })
+                        prompt.setOrigin(0.5);
+                        scene.introModal.add(prompt);
+                        scene.input.keyboard.once('keydown-SPACE', () => {
+                            scene.introModal.destroy();
+                            scene.controlsEnabled = true;
+                            console.log("Dialogue complete. Controls restored.");
+                        });
+                    }
+                },
+                repeat: fullMessage.length - 1
+            });
+        }
+
+        function collectNotebookP(scene) {
+            // 1. Enter "Cutscene Mode"
+            scene.controlsEnabled = false;
+            player.setVelocity(0, 0);
+            player.anims.play('idle'); // Make the scientist face forward
+
+            // 2. Clear the world item
+            if (scene.notebook1) scene.notebook1.destroy();
+
+            // 3. Create UI Elements (All set to Depth 3000+)
+            let largeNote = scene.add.image(400, 225, 'large_notebook').setScrollFactor(0).setDepth(3001);
+            let card = scene.add.image(400, 250, 'notebookPP').setScrollFactor(0).setDepth(3002);
+            let btn = scene.add.sprite(400, 350, 'transSelectButton', 1).setScrollFactor(0).setDepth(3003);
+
+            // 4. The Selection Logic
+            // We use a slight delay before listening to SPACE so the player 
+            // doesn't accidentally skip this screen from the previous conversation.
+            scene.time.delayedCall(300, () => {
+                scene.input.keyboard.once('keydown-SPACE', () => {
+                    btn.setFrame(2); // Show "Clicked" state
+
+                    scene.time.delayedCall(200, () => {
+                        // CLEANUP
+                        largeNote.destroy();
+                        card.destroy();
+                        btn.destroy();
+
+                        startFinalIntroDialogue(scene);
+                    });
+                });
+            });
+            scene.currentWeapon = ('PolymerP');
+        }
+
+        function collectNotebookF(scene) {
+            // 1. Enter "Cutscene Mode"
+            scene.controlsEnabled = false;
+            player.setVelocity(0, 0);
+            player.anims.play('idle');
+
+            // 2. Clear the world item
+            if (scene.notebook2) scene.notebook2.destroy();
+
+            // 3. Create UI Elements (All set to Depth 3000+)
+            //let largeNoteL = scene.add.image(200, 225, 'large_notebook').setScrollFactor(0).setDepth(3001);
+            let largeNoteC = scene.add.image(400, 225, 'large_notebook').setScrollFactor(0).setDepth(3001);
+            let cardL = scene.add.image(250, 250, 'notebookPP').setScrollFactor(0).setDepth(3002);
+            let btnL = scene.add.sprite(250, 350, 'transSelectButton', 0).setScrollFactor(0).setDepth(3003);
+            //let largeNoteR = scene.add.image(600, 225, 'large_notebook').setScrollFactor(0).setDepth(3001);
+            let cardR = scene.add.image(550, 250, 'notebookPF').setScrollFactor(0).setDepth(3002);
+            let btnR = scene.add.sprite(550, 350, 'transSelectButton', 1).setScrollFactor(0).setDepth(3003);
+            let selection = 1; // Default to right
+
+            const cursors = scene.input.keyboard.createCursorKeys();
+
+            const updateHighlight = () => {
+                if (selection === 0) {
+                    btnL.setFrame(1); // Highlighted frame
+                    btnR.setFrame(0); // Normal frame
+                } else {
+                    btnL.setFrame(0);
+                    btnR.setFrame(1);
+                }
+            };
+            // Listen for Left/Right presses
+            const keyL = scene.input.keyboard.on('keydown-LEFT', () => {
+                selection = 0;
+                updateHighlight();
+            });
+            const keyR = scene.input.keyboard.on('keydown-RIGHT', () => {
+                selection = 1;
+                updateHighlight();
+            });
+
+            // 3. Selection Logic (Space Bar)
+            scene.time.delayedCall(300, () => {
+                scene.input.keyboard.once('keydown-SPACE', () => {
+                    // Turn off the arrow listeners so they don't fire later
+                    scene.input.keyboard.off('keydown-LEFT');
+                    scene.input.keyboard.off('keydown-RIGHT');
+
+                    // Show "Clicked" state on the chosen button
+                    let chosenBtn = (selection === 0) ? btnL : btnR;
+                    chosenBtn.setFrame(2);
+
+                    scene.time.delayedCall(200, () => {
+                        // Set the actual weapon stats based on selection
+                        scene.currentWeapon = (selection === 0) ? 'PolymerP' : 'PolymerF';
+
+                        // Update the Tool HUD to reflect the choice
+                        if (scene.toolUI) {
+                            scene.toolUI.setVisible(true);
+                            // If PolymerP is frame 1 and PolymerF is frame 2:
+                            scene.reagentDisplay.setFrame(selection === 0 ? 1 : 2);
+                        }
+
+                        console.log("Weapon Equipped:", scene.currentWeapon);
+                        
+                        // Cleanup
+                        //largeNoteR.destroy(); largeNoteL.destroy();
+                        largeNoteC.destroy();
+                        cardL.destroy(); cardR.destroy();
+                        btnL.destroy(); btnR.destroy();
+
+                    });
+                    scene.input.keyboard.removeAllListeners();
+                    scene.controlsEnabled = true; 
+    
+                    // 3. IMPORTANT: Update the HUD frame immediately
+                    if (currentWeapon === 'PolymerP') scene.reagentDisplay.setFrame(1);
+                    if (currentWeapon === 'PolymerF') scene.reagentDisplay.setFrame(2);
+
+                    console.log("Controls restored. Weapon set to:", scene.currentWeapon);
+                });
+            });
+        }
+
+        function collectNotebookV(scene) {
+            scene.controlsEnabled = false;
+            player.setVelocity(0, 0);
+            player.anims.play('idle');
+
+            if (scene.notebook3) {
+                scene.notebook3.destroy();
+                scene.notebook3 = null;
+            }
+
+            // Use scene.currentWeapon to match your create() initialization
+            let currentLeftTexture = (scene.currentWeapon === 'PolymerP') ? 'notebookPP' : 'notebookPF';
+
+            let largeNoteC = scene.add.image(400, 225, 'large_notebook').setScrollFactor(0).setDepth(3001);
+            let cardL = scene.add.image(250, 250, currentLeftTexture).setScrollFactor(0).setDepth(3002);
+            let btnL = scene.add.sprite(250, 350, 'transSelectButton', 0).setScrollFactor(0).setDepth(3003);
+            let cardR = scene.add.image(550, 250, 'notebookVG').setScrollFactor(0).setDepth(3002);
+            let btnR = scene.add.sprite(550, 350, 'transSelectButton', 1).setScrollFactor(0).setDepth(3003);
+            
+            let selection = 1;
+
+            // Use temporary listeners
+            const keyL = scene.input.keyboard.on('keydown-LEFT', () => { selection = 0; btnL.setFrame(1); btnR.setFrame(0); });
+            const keyR = scene.input.keyboard.on('keydown-RIGHT', () => { selection = 1; btnL.setFrame(0); btnR.setFrame(1); });
+
+            scene.input.keyboard.once('keydown-SPACE', () => {
+                // Cleanup listeners immediately
+                scene.input.keyboard.off('keydown-LEFT');
+                scene.input.keyboard.off('keydown-RIGHT');
+                
+                let chosenBtn = (selection === 0) ? btnL : btnR;
+                chosenBtn.setFrame(2);
+
+                scene.time.delayedCall(200, () => {
+                    // LOCK IN THE WEAPON (Setting the scene property)
+                    if (selection === 1) {
+                        scene.currentWeapon = 'VirusGEN';
+                    }
+
+                    // HUD UPDATE
+                    if (scene.reagentDisplay) {
+                        scene.toolUI.setVisible(true);
+                        let f = 1; // Default
+                        if (scene.currentWeapon === 'PolymerF') f = 2;
+                        if (scene.currentWeapon === 'VirusGEN') f = 3;
+                        scene.reagentDisplay.setFrame(f);
+                    }
+
+                    // CLEANUP & RESTORE (All inside the delay)
+                    largeNoteC.destroy();
+                    cardL.destroy(); btnL.destroy();
+                    cardR.destroy(); btnR.destroy();
+                    
+                    scene.controlsEnabled = true; 
+                    console.log("Weapon Finalized: " + scene.currentWeapon);
+                });
+            });
+        }
+
+
+        function startFinalIntroDialogue(scene) {
+            let msg = "Hurry, we need to pump 50 liters of reagent before the transfection window closes in 15-30 minutes. I'll start a timer for you.";
+            
+            // Ensure the container exists and is active
+            if (!scene.introModal || !scene.introModal.active) {
+                scene.introModal = scene.add.container(400, 300).setScrollFactor(0);
+            }
+            
+            scene.introModal.removeAll(true); // Clear old stuff
+            scene.introModal.setVisible(true).setDepth(10000); 
+
+            // Create the bubble AFTER the container check
+            let bubble = scene.add.graphics();
+            bubble.fillStyle(0x000000, 0.7);
+            bubble.fillRoundedRect(-200, -100, 400, 200, 15);
+            
+            let txt = scene.add.text(-180, -70, '', { 
+                fontSize: '18px', 
+                fill: '#fff', 
+                wordWrap: { width: 360 } 
+            });
+
+            scene.introModal.add([bubble, txt]);
+
+            let i = 0;
+            let typeEvent = scene.time.addEvent({
+                delay: 30,
+                callback: () => {
+                    if (txt && txt.active) {
+                        txt.text += msg[i];
+                        i++;
+                        if (i === msg.length) {
+                            let prompt = scene.add.text(0, 70, '[ Press SPACE ]', { fill: '#00ff00' }).setOrigin(0.5);
+                            scene.introModal.add(prompt);
+                            
+                            scene.input.keyboard.once('keydown-SPACE', () => {
+                                typeEvent.remove();
+                                scene.introModal.setVisible(false); // Hide it
+                                
+                                // RELEASE PLAYER & SHOW HUD
+                                scene.controlsEnabled = true;
+                                scene.challengeStarted = true;
+
+                                scene.scoreText.setVisible(true).setDepth(9999);
+                                scene.healthText.setVisible(true).setDepth(9999);
+                                scene.timerText.setVisible(true).setDepth(9999);
+                                
+                                // Tool UI Top-Left Positioning
+                                scene.toolUI.setPosition(70, 130); 
+                                scene.toolUI.setVisible(true).setDepth(9999);
+                                scene.toolUI.setScale(0.5);
+                                scene.reagentDisplay.setFrame(1);
+
+                                if (scene.door2) {
+                                    scene.tweens.add({
+                                        targets: scene.door1C,
+                                        y: scene.door1C.y - 80,
+                                        duration: 2000
+                                    });
+                                }
+                            });
+                        }
+                    }
+                },
+                repeat: msg.length - 1
+            });
+        }
+
+        function createShearTrap(scene, x, floorY, ceilingY) {
+            let floorEmit = scene.add.sprite(x, floorY, 'shearEmitter').setOrigin(0.5, 1).setDepth(31);
+            let ceilingEmit = scene.add.sprite(x, ceilingY, 'shearEmitter').setOrigin(0.5, 0).setDepth(31).setFlipY(true);
+
+            let beamHeight = floorY - ceilingY;
+            let beam = scene.add.tileSprite(x, ceilingY, 32, beamHeight, 'shearLaser02').setOrigin(0.5, 0).setDepth(30);
+            
+            // Create the hazard
+            let hazard = scene.shearHazards.create(x, ceilingY, null); 
+            hazard.setOrigin(0.5, 0);
+            
+            // FORCE THE BODY SIZE
+            // We must set the body size AND the display size to match the beamHeight
+            hazard.body.setSize(20, beamHeight); // The 20px width makes it harder to slip through
+            hazard.body.setOffset(0, 0);
+            
+            hazard.setVisible(false);
+
+            let trap = { floorEmit, ceilingEmit, beam, hazard };
+            scene.trapList.push(trap);
+            return trap;
+        }
+
+        function startBossLogic(scene) {
+            if (bossTimer) return;
+            
+            // UI Setup
+            scene.add.rectangle(400, 50, 400, 20, 0x000000).setScrollFactor(0);
+            bossHealthBar = scene.add.rectangle(400, 50, 400, 20, 0xff0000).setScrollFactor(0);
+            bossHealthBar.setDepth(100);
+
+            const runLoop = () => {
+                if (bossHP <= 0) return;
+
+                // STATE 1: DEFENSIVE (2.2s)
+                bossState = 'defensive';
+                boss.setTint(0x888888);
+                
+                scene.time.delayedCall(2200, () => {
+                    if (bossHP <= 0) return;
+
+                    // STATE 2: ATTACKING (0.8s)
+                    bossState = 'attacking';
+                    boss.clearTint();
+                    spawnBossAttack(scene);
+
+                    // Wait for the full 0.8s attack duration before switching to cooldown
+                    scene.time.delayedCall(800, () => {
+                        if (bossHP <= 0) return;
+
+                        // STATE 3: COOLDOWN (1.0s)
+                        bossState = 'cooldown';
+                        boss.setTint(0x00ff00);
+                        
+                        // Wait for 1s vulnerability window before starting OVER
+                        scene.time.delayedCall(1000, runLoop);
+                    });
+                });
+            };
+
+            runLoop();
+            scene.time.addEvent({
+                delay: 15000, // Exactly every 15 seconds
+                callback: () => {
+                    if (bossHP <= 0) return;
+                    
+                    let dropX = boss.x - Phaser.Math.Between(200, 600);
+                    let pUp = scene.physics.add.sprite(dropX, -50, 'powerup_crate');
+                    
+                    pUp.setGravityY(300);
+                    pUp.setBounce(0.3); // Soft bounce on impact
+                    pUp.setDragX(100);  // Prevents sliding forever
+                    pUp.setCollideWorldBounds(true); // Don't fall off the screen edges
+
+                    // ADD THIS COLLIDER:
+                    scene.physics.add.collider(pUp, scene.platforms);
+                    
+                    let type = Phaser.Math.RND.pick(['revit', 'stabilizer']);
+                    
+                    scene.physics.add.overlap(player, pUp, () => {
+                        applyBossPowerup(type, scene);
+                        pUp.destroy();
+                    });
+                },
+                loop: true
+            });
+        }
+        
+        function spawnBossAttack(scene) {
+            if (bossHP <= 0 || bossState !== 'attacking') return;
+
+            // A pattern of 3 pulses
+            [0, 1, 2].forEach(i => {
+                scene.time.delayedCall(i * 400, () => { // Faster pulses
+                    if (bossHP > 0 && bossState === 'attacking') {
+                        let projectile = scene.physics.add.sprite(boss.x - 80, boss.y, 'capsid_empty');
+                        projectile.body.setAllowGravity(false);
+
+                        // Pulsating heights: Low, Mid, High
+                        projectile.y = (i === 0) ? boss.y + 60 : (i === 1) ? boss.y : boss.y - 60;
+                        projectile.setVelocityX(-500);
+
+                        scene.time.delayedCall(2000, () => { if (projectile.active) projectile.destroy(); });
+
+                        scene.physics.add.overlap(player, projectile, () => {
+                            if (projectile.active && !player.isInvulnerable) {
+                                // Correct the arguments to match your damagePlayer function:
+                                // (player, hazard, scene, amount)
+                                damagePlayer(player, projectile, scene, 10); 
+
+                                // Add the knockback/i-frame logic we used for the shear traps
+                                player.isInvulnerable = true;
+                                projectile.destroy();
+
+                                scene.time.delayedCall(500, () => { 
+                                    player.isInvulnerable = false; 
+                                });
+                            }
+                        });
+                    }
+                });
+            });
+        }
+        function hitBoss(boss, tube) {
+            // The scene is a property of the objects involved in the collision
+            let scene = boss.scene; 
+
+            let canDamage = (bossState === 'cooldown');
+            
+            // Test Toggle: Allow damage during attacking if needed
+            // if (bossState === 'attacking') canDamage = true;
+
+            if (canDamage) {
+                // Use a multiplier if the Revit powerup is active
+                let dmg = weaponStats[currentWeapon].damage * (scene.damageMultiplier || 1);
+                bossHP -= dmg;
+                
+                tube.destroy();
+                
+                // Update Health Bar
+                let percentage = Math.max(0, bossHP / bossMaxHP);
+                bossHealthBar.width = 400 * percentage;
+                
+                boss.setTint(0xffffff);
+                scene.time.delayedCall(100, () => {
+                    if (bossState === 'cooldown') boss.setTint(0x00ff00);
+                    else if (bossState === 'defensive') boss.setTint(0x888888);
+                    else boss.clearTint();
+                });
+
+                if (bossHP <= 0) {
+                    if (bossHealthBar) bossHealthBar.destroy();
+                    endGame(scene);
+                }
+            } else {
+                tube.destroy(); // Always destroy the tube so they don't stack up
+            }
+        }
+
+        function applyBossPowerup(type, scene) {
+            if (type === 'revit') {
+                scene.damageMultiplier = 3;
+                scene.time.delayedCall(5000, () => scene.damageMultiplier = 1);
+            } else if (type === 'stabilizer') {
+                // Freeze Boss if in cooldown
+                if (bossState === 'cooldown') {
+                    // Logic to pause the state timer would go here
+                }
+                // Slow down projectiles
+                scene.children.list.forEach(child => {
+                    if (child.texture && child.texture.key === 'capsid_empty') {
+                        child.setVelocityX(-50); // Sluggish
+                        child.setTint(0x00ffff); // Ice blue
+                    }
+                });
+            }
+        }
+        
+        function endGame(scene) {
+            bossState = 'defeated';
+            scene.physics.pause();
+            if (bossTimer) bossTimer.destroy();
+
+            // Clear the clutter
+            scene.children.list.forEach(child => {
+                if (child.texture && child.texture.key === 'capsid_empty') child.destroy();
+            });
+
+            // Launch the corporate briefing
+            showResultsModal(scene);
+        }
+
+        function showResultsModal(scene) {
+            let modal = scene.add.container(400, 225).setScrollFactor(0).setDepth(5000);
+            let bg = scene.add.image(0, 0, 'modal_bg');
+            modal.add(bg);
+
+            let yieldValue = totalScore.toExponential(2); 
+            let scoreText = scene.add.text(-80, -30, `TITER: ${yieldValue} GC/mL`, { 
+                fontSize: '22px', fill: '#00ff00', fontStyle: 'bold', fontFamily: 'Courier New'
+            }).setOrigin(0.5);
+            
+            let healthValue = Math.max(0, Math.floor(scene.health));
+            let healthText = scene.add.text(-80, 20, `PERCENT FULL CAPSIDS: ${healthValue}%`, { 
+                fontSize: '22px', fill: '#ffffff', fontFamily: 'Courier New'
+            }).setOrigin(0.5);
+            
+            modal.add([scoreText, healthText, 
+                scene.add.sprite(318, -157, 'avatar_biz').play('loop_biz'),
+                scene.add.sprite(318, -53, 'avatar_rnd').play('loop_rnd'),
+                scene.add.sprite(318, 53, 'avatar_mirus').play('loop_mirusteam'),
+                scene.add.sprite(318, 157, 'avatar_player').play('loop_selfie')
+            ]);
+
+            // Success Logic
+            if (totalScore >= 10000 && healthValue >= 20) {
+                scene.time.delayedCall(2000, () => {
+                    let prompt = scene.add.text(0, 160, 'PRESS SPACE TO CONTINUE', { 
+                        fontSize: '18px', fill: '#ffff00', fontStyle: 'bold', backgroundColor: '#000'
+                    }).setOrigin(0.5);
+                    modal.add(prompt);
+
+                    scene.input.keyboard.once('keydown-SPACE', () => {
+                        showSecretCode(modal, scene);
+                    });
+                });
+            } else {
+                // FAILURE PATH: Prompt to restart immediately
+                scene.time.delayedCall(2000, () => {
+                    let retryPrompt = scene.add.text(0, 160, 'TITER TOO LOW. PRESS SPACE TO RETRY', { 
+                        fontSize: '18px', fill: '#ff0000', fontStyle: 'bold', backgroundColor: '#000'
+                    }).setOrigin(0.5);
+                    modal.add(retryPrompt);
+
+                    scene.input.keyboard.once('keydown-SPACE', () => {
+                        window.location.reload(); // Hard reset for clean slate
+                    });
+                });
+            }
+        }
+        function showSecretCode(container, scene) {
+            container.list.forEach(item => {
+                if (item.text && (item.text.includes('TITER') || item.text.includes('PERCENT') || item.text.includes('SPACE'))) {
+                    item.destroy();
+                }
+            });
+
+            let instruction = scene.add.text(-80, -30, 'Tell the Table Host this Secret Code\nto Receive Your Envelope:', { 
+                fontSize: '16px', fill: '#00ffff', align: 'center', fontFamily: 'Arial'
+            }).setOrigin(0.5);
+
+            let code = scene.add.text(-80, 30, 'VIRUS_PRO_99', { 
+                fontSize: '32px', fill: '#ffff00', fontStyle: 'bold', backgroundColor: '#222', padding: 10
+            }).setOrigin(0.5);
+
+            let restartInfo = scene.add.text(0, 160, 'PRESS SPACE TO REPLAY', { 
+                fontSize: '14px', fill: '#ffffff'
+            }).setOrigin(0.5);
+
+            container.add([instruction, code, restartInfo]);
+
+            // Final Reset Listener
+            scene.time.delayedCall(1000, () => {
+                scene.input.keyboard.once('keydown-SPACE', () => {
+                    window.location.reload(); 
+                });
+            });
+        }
+    </script>
+</body>
+</html>
