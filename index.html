@@ -1127,60 +1127,138 @@
             this.cameras.main.startFollow(player, true, 0.1, 0.1, 0, 100);
             this.cameras.main.setDeadzone(50, 50);
             
-
-            
-            // 11. START SCREEN
+            // --- INTRO + LOADING
             this.startBG = this.add.sprite(400, 225, 'startScreen_01').setDepth(10000).setScrollFactor(0);
-            // this.startBG.play('start_anim');
 
             this.startPrompt = this.add.text(400, 400, 'PRESS SPACE TO START OPTIMIZING TITER', {
                 fontSize: '20px', fill: '#ffffff', backgroundColor: '#000'
             }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
 
-            // Stop physics until started
             this.physics.pause();
 
             this.input.keyboard.once('keydown-SPACE', () => {
+                // 1. Clear Start Screen
                 this.startBG.destroy();
                 this.startPrompt.destroy();
 
-                // 1. Setup Loading Assets
+                // 2. Setup Loading Assets (Instructions + Man)
                 let loadBG = this.add.image(400, 225, 'load_BG01_01').setScrollFactor(0).setDepth(10000);
-                
-                // Man starts 25px further right (825) and slides to edge (800)
                 let man = this.add.image(825, 225, 'load_FG01_01').setOrigin(1, 0.5).setScrollFactor(0).setDepth(10001);
-                
                 let loadText = this.add.text(40, 380, 'Press or Hold \n[SPACE] to\nshoot & collect full capsids', {
-                    fontSize: '18px',
-                    fill: '#ffffff',
-                    fontFamily: 'Courier New',
-                }).setDepth(10002).setScrollFactor(0); 
+                    fontSize: '18px', fill: '#ffffff', fontFamily: 'Courier New',
+                }).setDepth(10002).setScrollFactor(0);
 
-                // 2. The 5-Second Glide
+                let verifyText = this.add.text(20, 20, 'Synthesizing Vectors...', { 
+                    fontSize: '14px', fill: '#00ffff', fontFamily: 'Courier New'
+                }).setDepth(10003).setScrollFactor(0).setAlpha(0);
+
+                // 3. The 5-Second Minimum Timer
+                let minTimePassed = false;
+                this.time.delayedCall(5000, () => {
+                    minTimePassed = true;
+                });
+
+                // 4. Movement Tween (The 8-second glide)
                 this.tweens.add({
                     targets: man,
                     x: 800,
-                    duration: 5000,
-                    ease: 'Linear',
-                    onComplete: () => {
-                        // Clean up assets after fade is black
-                        loadBG.destroy();
-                        man.destroy();
-                        loadText.destroy();
-                         
-                        // 4. Start the Game
-                        this.gameStarted = true;
-                        this.physics.resume();
-                        this.cameras.main.fadeIn(1000, 0, 0, 0);
-                    }
+                    duration: 8000,
+                    ease: 'Linear'
                 });
 
-                // 3. The Overlapping Fade-Out
-                // Starts at 4 seconds (4000ms) to create a smooth transition while he is still moving
-                this.time.delayedCall(4000, () => {
-                    this.cameras.main.fadeOut(1000, 0, 0, 0);
+                // 5. The "Gatekeeper" Loop
+                // This runs every 100ms to see if we are allowed to start the game
+                let startCheck = this.time.addEvent({
+                    delay: 100,
+                    callback: () => {
+                        const animsReady = Object.keys(this.anims.anims.entries).length > 0;
+
+                        // Conditions: 5s passed AND animations are ready
+                        if (minTimePassed && animsReady) {
+                            startCheck.remove(); // Stop checking
+                            verifyText.destroy();
+                            
+                            // Trigger the fade out and transition
+                            this.cameras.main.fadeOut(1000, 0, 0, 0);
+                            this.time.delayedCall(1000, () => {
+                                loadBG.destroy();
+                                man.destroy();
+                                loadText.destroy();
+                                this.gameStarted = true;
+                                this.physics.resume();
+                                this.cameras.main.fadeIn(1000, 0, 0, 0);
+                            });
+                        } else if (minTimePassed && !animsReady) {
+                            // Timer is done but GPU is still busy; show the text
+                            verifyText.setAlpha(1);
+                        }
+                    },
+                    loop: true
                 });
             });
+
+            // // 11. START SCREEN
+            // this.startBG = this.add.sprite(400, 225, 'startScreen_01').setDepth(10000).setScrollFactor(0);
+            // // this.startBG.play('start_anim');
+
+            // this.startPrompt = this.add.text(400, 400, 'PRESS SPACE TO START OPTIMIZING TITER', {
+            //     fontSize: '20px', fill: '#ffffff', backgroundColor: '#000'
+            // }).setOrigin(0.5).setDepth(10001).setScrollFactor(0);
+
+            // // Stop physics until started
+            // this.physics.pause();
+
+            // this.input.keyboard.once('keydown-SPACE', () => {
+            //     this.startBG.destroy();
+            //     this.startPrompt.destroy();
+
+            //     // 1. Setup Loading Assets
+            //     let loadBG = this.add.image(400, 225, 'load_BG01_01').setScrollFactor(0).setDepth(10000);
+                
+            //     // Man starts 25px further right (825) and slides to edge (800)
+            //     let man = this.add.image(825, 225, 'load_FG01_01').setOrigin(1, 0.5).setScrollFactor(0).setDepth(10001);
+            //     let loadingText = this.add.text(40, 40, 'Loading Research Data...', { fill: '#ffffff' }).setDepth(10001);
+            //     this.load.on('progress', (value) => {
+            //         // value is 0 to 1. Use it to scale a bar or update text.
+            //         loadingText.setText(`Loading: ${Math.round(value * 100)}%`);
+            //     });
+                
+            //     let loadText = this.add.text(40, 380, 'Press or Hold \n[SPACE] to\nshoot & collect full capsids', {
+            //         fontSize: '18px',
+            //         fill: '#ffffff',
+            //         fontFamily: 'Courier New',
+            //     }).setDepth(10002).setScrollFactor(0); 
+
+            //     this.load.on('complete', () => {
+            //         loadingText.destroy();
+            //         console.log("Assets 100% loaded and decoded.");
+            //     });
+
+            //     // 2. The 8-Second Glide
+            //     this.tweens.add({
+            //         targets: man,
+            //         x: 800,
+            //         duration: 8000,
+            //         ease: 'Linear',
+            //         onComplete: () => {
+            //             // Clean up assets after fade is black
+            //             loadBG.destroy();
+            //             man.destroy();
+            //             loadText.destroy();
+                         
+            //             // 4. Start the Game
+            //             this.gameStarted = true;
+            //             this.physics.resume();
+            //             this.cameras.main.fadeIn(1000, 0, 0, 0);
+            //         }
+            //     });
+
+            //     // 3. The Overlapping Fade-Out
+            //     // Starts at 4 seconds (4000ms) to create a smooth transition while he is still moving
+            //     this.time.delayedCall(4000, () => {
+            //         this.cameras.main.fadeOut(1000, 0, 0, 0);
+            //     });
+            // });
 
             const contaminationDamage = 2;
 
