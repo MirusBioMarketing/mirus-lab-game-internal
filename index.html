@@ -1494,12 +1494,6 @@
                 }
             }
 
-            // // MARQUEE TRIGGER
-            // let marqDist = Math.abs(this.player.x - bossRoomShift);
-            // if marqDist < 600) {
-            //     if (!this.bossMarquee)
-            // }
-
             // Boss Trigger
             let dist = Phaser.Math.Distance.Between(player.x, player.y, boss.x, boss.y);
             if (dist < 800 && !this.bossStarted) { 
@@ -1927,6 +1921,7 @@
                     projectile.body.setAllowGravity(false);
                     projectile.body.setVelocity(stats.speed * direction, yOffset);
                     projectile.setAngularVelocity(500);
+                    projectile.dmg = stats.damage;
 
                     if (isRevIT) {
                         if (activeWeapon === 'VirusGEN') projectile.setTint(0xff00ff);
@@ -1985,25 +1980,26 @@
         }
 
         function hitCapsid(tube, capsid) {
-            // 1. Get the scene from the tube itself
             let scene = tube.scene; 
-            let stats = weaponStats[currentWeapon];
+            
+            // 1. Subtract the damage (Using the new 'dmg' property we added)
+            capsid.hp -= tube.dmg;
 
+            // 2. Visual Effects
             if (scene.anims.exists('impact_poof')) {
                 let p = scene.add.sprite(tube.x, tube.y, 'poof');
-                p.setDepth(1000); // Above the gameplay
-                p.setAngle(Phaser.Math.Between(0, 360)); // Randomized rotation
+                p.setDepth(1000);
+                p.setAngle(Phaser.Math.Between(0, 360));
                 p.play('impact_poof');
-                // No need to manually destroy if 'hideOnComplete: true' was set in the anim
                 p.on('animationcomplete', () => { 
                     p.destroy();
                 });
             }
 
-            capsid.hp -= stats.damage;
+            // REMOVED: capsid.hp -= stats.damage; <--- THIS WAS THE CRASH CULPRIT
+
             capsid.setTint(0xff00ff); 
 
-            // Use scene.time instead of this.time
             scene.time.delayedCall(100, () => {
                 if (capsid.active) capsid.clearTint();
             });
@@ -2011,10 +2007,8 @@
             tube.destroy(); 
 
             if (capsid.hp <= 0) {
-                // 2. Use scene.score instead of this.score
                 scene.score += 1;
                 scene.scoreText.setText('CAPSIDS CAPTURED: ' + scene.score);
-                
                 captureSequence(capsid);
             }
         }
@@ -2562,6 +2556,12 @@
             if (bossState === 'vulnerable') {
                 let dmg = weaponStats[currentWeapon].damage * (scene.damageMultiplier || 1);
                 bossHP -= dmg;
+                boss.setTint(0xff0000); 
+                scene.time.delayedCall(100, () => {
+                    if (boss && boss.active) {
+                        boss.clearTint();
+                    }
+                });
                 tube.destroy();
                 
                 // Bar update
