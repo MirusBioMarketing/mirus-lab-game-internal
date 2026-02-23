@@ -58,7 +58,8 @@
             this.load.spritesheet('transSelectButton', 'assets/TransfectionSelectionButtonTiles01.webp', { frameWidth: 126, frameHeight: 24 });
             this.load.image('bakeoffNotebook', 'assets/BakeoffNotebook01.webp');
             this.load.image('blockSpace', 'assets/BuildingBlock01.webp');
-            this.load.spritesheet('FloatingPlatform', 'assets/FloatingPlatformSprites01.webp', { frameWidth: 64, frameHeight: 48 });
+            this.load.spritesheet('floatingPlatform', 'assets/FloatingPlatformSprites01.png', { frameWidth: 64, frameHeight: 48 });
+            this.load.image('floatingPlatform2', 'assets/floatingplatform_sprite_02.webp');
             this.load.image('item_RevIT', 'assets/ItemRevIT01.webp');
             this.load.image('item_Stabilizer', 'assets/ItemStabilizer01.webp');
             this.load.image('notebookPF', 'assets/NotebookPF01.webp');
@@ -244,12 +245,20 @@
             // this.labmate.setOrigin(0.5, 1).setDepth(20);
             // this.labmate.play('labmate_idle_anim');
             
-            this.anims.create({
-                key: 'platform_move',
-                frames: this.anims.generateFrameNumbers('FloatingPlatform', { start: 0, end: 3 }),
-                frameRate: 8,
-                repeat: -1
-            });
+            if (this.textures.get('floatingPlatform').frameTotal > 1) {
+                this.anims.create({
+                    key: 'platform_move',
+                    frames: this.anims.generateFrameNumbers('floatingPlatform', { start: 0, end: 3 }),
+                    frameRate: 8,
+                    repeat: -1
+                });
+            }
+            // this.anims.create({
+            //     key: 'platform_move',
+            //     frames: this.anims.generateFrameNumbers('floatingPlatform', { start: 0, end: 3 }),
+            //     frameRate: 8,
+            //     repeat: -1
+            // });
             this.movingPlatforms = this.physics.add.group({
                 allowGravity: false,
                 immovable: true
@@ -367,6 +376,10 @@
                 frameRate: 10, // This is the base speed for the non-duration frames
                 repeat: -1
             });
+
+            // ANIMATION CHECKER
+            console.log("FloatingPlatform frames:", this.textures.get('floatingPlatform').frameTotal);
+            console.log("All animations:", Object.keys(this.anims.anims.entries));
             
             // 3. GAME OBJECTS -PLAYER & BOSS
             player = this.physics.add.sprite(100, 300, 'scientist');
@@ -651,16 +664,47 @@
             mimetech.setDepth(5);
 
             // --- Moving Platform ---
+            // this.movingPlatform = this.physics.add.group({
+            //     allowGravity: false,
+            //     immovable: true
+            // }); 
+
+            // let mp = this.movingPlatform.create(section4Shift + 2450, 250, 'FloatingPlatform');
+            // mp.startX = section4Shift + 2450;
+            // mp.range = 100;
+            // mp.speed = 3;
+            // mp.direction = 1;
+            // if (this.anims.exists('platform_move')) {
+            //     mp.play('platform_move');
+            // }
+
+            // this.physics.add.collider(player, this.movingPlatform);
             this.movingPlatform = this.physics.add.group({
                 allowGravity: false,
                 immovable: true
             }); 
 
-            let mp = this.movingPlatform.create(section4Shift + 2450, 250, 'FloatingPlatform');
-            mp.startX = section4Shift + 2450;
-            mp.range = 100;
-            mp.speed = 3;
-            mp.direction = 1;
+            // Check if the texture loaded properly
+            if (this.textures.exists('floatingPlatform')) {
+                let mp = this.movingPlatform.create(section4Shift + 2450, 250, 'floatingPlatform', 0);
+                
+                // Force set the display size and body size
+                mp.setDisplaySize(64, 48);
+                mp.body.setSize(64, 48);
+                mp.setOrigin(0.5);
+                
+                mp.startX = section4Shift + 2450;
+                mp.range = 100;
+                mp.speed = 3;
+                mp.direction = 1;
+                
+                // Only play animation if it exists
+                if (this.anims.exists('platform_move')) {
+                    mp.play('platform_move');
+                }
+            } else {
+                console.error('FloatingPlatform texture failed to load!');
+            }
 
             this.physics.add.collider(player, this.movingPlatform);
 
